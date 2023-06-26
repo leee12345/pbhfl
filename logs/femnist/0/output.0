@@ -1,0 +1,107 @@
+Total number of clients: 10
+Total number of middle servers: 5
+--- Random Initialization ---
+train_accuracy: 0.0311544, 10th percentile: 0.0224782, 50th percentile: 0.03045, 90th percentile 0.049337
+train_loss: 4.15012, 10th percentile: 4.14342, 50th percentile: 4.14969, 90th percentile 4.15742
+test_accuracy: 0.0309351, 10th percentile: 0, 50th percentile: 0.0119048, 90th percentile 0.0811355
+test_loss: 4.1406, 10th percentile: 4.12398, 50th percentile: 4.14024, 90th percentile 4.16716
+--- Round 1 of 20 ---
+train_accuracy: 0.0401808, 10th percentile: 0.0184061, 50th percentile: 0.0366726, 90th percentile 0.0706739
+train_loss: 4.1025, 10th percentile: 4.09608, 50th percentile: 4.10148, 90th percentile 4.109
+test_accuracy: 0.0309025, 10th percentile: 0, 50th percentile: 0.025641, 90th percentile 0.0726191
+test_loss: 4.09514, 10th percentile: 4.07188, 50th percentile: 4.09389, 90th percentile 4.12065
+--- Round 2 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 4.05913, 10th percentile: 4.04713, 50th percentile: 4.05806, 90th percentile 4.07113
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 4.05387, 10th percentile: 4.02439, 50th percentile: 4.0555, 90th percentile 4.082
+--- Round 3 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 4.0115, 10th percentile: 3.99404, 50th percentile: 4.0108, 90th percentile 4.02776
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 4.00902, 10th percentile: 3.97182, 50th percentile: 4.0136, 90th percentile 4.04486
+--- Round 4 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 3.94221, 10th percentile: 3.9165, 50th percentile: 3.94165, 90th percentile 3.96565
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 3.94334, 10th percentile: 3.89152, 50th percentile: 3.95358, 90th percentile 3.9976
+--- Round 5 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 3.86183, 10th percentile: 3.8259, 50th percentile: 3.86132, 90th percentile 3.89191
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 3.86917, 10th percentile: 3.80977, 50th percentile: 3.87738, 90th percentile 3.92472
+--- Round 6 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 3.79132, 10th percentile: 3.74754, 50th percentile: 3.79043, 90th percentile 3.83416
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 3.81206, 10th percentile: 3.7376, 50th percentile: 3.81931, 90th percentile 3.86088
+--- Round 7 of 20 ---
+train_accuracy: 0.0666661, 10th percentile: 0.0330495, 50th percentile: 0.0734078, 90th percentile 0.093615
+train_loss: 3.74394, 10th percentile: 3.69636, 50th percentile: 3.74267, 90th percentile 3.79688
+test_accuracy: 0.0748712, 10th percentile: 0.0428571, 50th percentile: 0.0620301, 90th percentile 0.13231
+test_loss: 3.76841, 10th percentile: 3.67597, 50th percentile: 3.76796, 90th percentile 3.82593
+--- Round 8 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.71309, 10th percentile: 3.67098, 50th percentile: 3.7136, 90th percentile 3.76492
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.75464, 10th percentile: 3.66458, 50th percentile: 3.75986, 90th percentile 3.81602
+--- Round 9 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.6964, 10th percentile: 3.65227, 50th percentile: 3.69656, 90th percentile 3.74774
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.74225, 10th percentile: 3.64964, 50th percentile: 3.7468, 90th percentile 3.81742
+--- Round 10 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.68072, 10th percentile: 3.63367, 50th percentile: 3.6792, 90th percentile 3.74072
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.73438, 10th percentile: 3.63572, 50th percentile: 3.74218, 90th percentile 3.81033
+--- Round 11 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.67415, 10th percentile: 3.6339, 50th percentile: 3.66648, 90th percentile 3.73294
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.73564, 10th percentile: 3.64802, 50th percentile: 3.7363, 90th percentile 3.81545
+--- Round 12 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.67529, 10th percentile: 3.63535, 50th percentile: 3.67235, 90th percentile 3.73042
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.73172, 10th percentile: 3.63462, 50th percentile: 3.74032, 90th percentile 3.82031
+--- Round 13 of 20 ---
+train_accuracy: 0.064339, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0728593
+train_loss: 3.6665, 10th percentile: 3.61949, 50th percentile: 3.66271, 90th percentile 3.72708
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.7305, 10th percentile: 3.61884, 50th percentile: 3.73931, 90th percentile 3.81544
+--- Round 14 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.66793, 10th percentile: 3.62777, 50th percentile: 3.66413, 90th percentile 3.72397
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.72513, 10th percentile: 3.62988, 50th percentile: 3.73692, 90th percentile 3.81601
+--- Round 15 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.66573, 10th percentile: 3.62615, 50th percentile: 3.66258, 90th percentile 3.72308
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.72934, 10th percentile: 3.64463, 50th percentile: 3.72595, 90th percentile 3.803
+--- Round 16 of 20 ---
+train_accuracy: 0.064339, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0728593
+train_loss: 3.66605, 10th percentile: 3.62585, 50th percentile: 3.66126, 90th percentile 3.72138
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.73061, 10th percentile: 3.62538, 50th percentile: 3.73219, 90th percentile 3.82766
+--- Round 17 of 20 ---
+train_accuracy: 0.0657933, 10th percentile: 0.054811, 50th percentile: 0.0689368, 90th percentile 0.0759644
+train_loss: 3.66786, 10th percentile: 3.63384, 50th percentile: 3.66322, 90th percentile 3.71757
+test_accuracy: 0.0517489, 10th percentile: 0.0219512, 50th percentile: 0.0519568, 90th percentile 0.0982143
+test_loss: 3.72644, 10th percentile: 3.66033, 50th percentile: 3.72148, 90th percentile 3.7942
+--- Round 18 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.66891, 10th percentile: 3.6346, 50th percentile: 3.66845, 90th percentile 3.71293
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.72862, 10th percentile: 3.64785, 50th percentile: 3.70186, 90th percentile 3.81404
+--- Round 19 of 20 ---
+train_accuracy: 0.064339, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0728593
+train_loss: 3.66415, 10th percentile: 3.62617, 50th percentile: 3.6621, 90th percentile 3.71557
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.72917, 10th percentile: 3.64285, 50th percentile: 3.7238, 90th percentile 3.81799
+--- Round 20 of 20 ---
+train_accuracy: 0.0640475, 10th percentile: 0.0558496, 50th percentile: 0.0651204, 90th percentile 0.0700112
+train_loss: 3.66395, 10th percentile: 3.62873, 50th percentile: 3.65917, 90th percentile 3.72001
+test_accuracy: 0.0491928, 10th percentile: 0.0219512, 50th percentile: 0.0394737, 90th percentile 0.0982143
+test_loss: 3.73757, 10th percentile: 3.64038, 50th percentile: 3.72895, 90th percentile 3.81704
