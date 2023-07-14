@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 import scipy
 import numpy as np
-
+from scipy.optimize import minimize
+import math
+import random
 
 class Server(ABC):
     def __init__(self, server_model, merged_update):
@@ -10,8 +12,7 @@ class Server(ABC):
         self.total_weight = 0
 
     @abstractmethod
-    def train_model(self, my_round, num_syncs, clients_per_group,
-                    sampler, batch_size, base_dist):
+    def train_model(self, my_round, num_syncs,log_fp):
         """Aggregate clients' models after each iteration. If
         num_syncs synchronizations are reached, middle servers'
         models are then aggregated at the top server.
@@ -49,6 +50,7 @@ class Server(ABC):
             merged_update_[p].set_data(
                 merged_update_[p].data() +
                 (weight * current_update_[p].data()))
+            #print("cur update data",current_update_[p].data())
 
     def update_model(self):
         """Update self.model with averaged merged update."""
@@ -80,13 +82,20 @@ class Server(ABC):
             log_dir: Directory to save model file.
         """
         self.model.save(log_dir)
-
+  
+        
+        
+        
+        
 
 class TopServer(Server):
     def __init__(self, server_model, merged_update, servers):
         self.middle_servers = []
         self.register_middle_servers(servers)
         super(TopServer, self).__init__(server_model, merged_update)
+        
+    def update_middleserver(self, servers):
+        self.middle_servers = servers
 
     def register_middle_servers(self, servers):
         """Register middle servers.
@@ -98,17 +107,15 @@ class TopServer(Server):
 
         self.middle_servers.extend(servers)
 
-    def train_model(self, my_round, num_syncs, clients_per_group,
-                    sampler, batch_size, base_dist):
+    def train_model(self, my_round, num_syncs,clients_per_group,log_fp):
         """Call middle servers to train their models and aggregate
         their updates."""
         for s in self.middle_servers:
             s.set_model(self.model)
-            update = s.train_model(
-                my_round, num_syncs, clients_per_group, sampler, batch_size, base_dist)
+            update = s.train_model(my_round, num_syncs,log_fp)
             self.merge_updates(clients_per_group, update)
-
         self.update_model()
+        
 
     def test_model(self, set_to_use="test"):
         """Call middle servers to test their models."""
@@ -120,404 +127,9 @@ class TopServer(Server):
             metrics.update(s_metrics)
 
         return metrics
+    
 
-
-class MiddleServer(Server):
-    def __init__(self, server_id, server_model, merged_update, clients_in_group):
-        self.server_id = server_id
-        self.clients = []
-        self.register_clients(clients_in_group)
-        super(MiddleServer, self).__init__(server_model, merged_update)
-
-    def register_clients(self, clients):
-        """Register clients of this middle server.
-        Args:
-            clients: Clients to be registered.
-        """
-        if type(clients) is not list:
-            clients = [clients]
-
-        self.clients.extend(clients)
-
-    def select_clients(self, my_round, clients_per_group, sampler="random",
-                       batch_size=32, base_dist=None, display=False,
-                       metrics_dir="metrics", rand_per_group=1):# rand_per_group=2
-        """Randomly select clients_per_group clients for this round."""
-        online_clients = self.online(self.clients)
-        num_clients = len(online_clients)
-        print('num_clients',num_clients)
-        num_sample_clients = min(clients_per_group, num_clients) \
-                             - rand_per_group
-
-        # Randomly select part of num_clients clients
-        np.random.seed(my_round)
-        rand_clients_idx = np.random.choice(
-            range(num_clients), rand_per_group, replace=False)
-        rand_clients = np.take(online_clients, rand_clients_idx).tolist()
-
-        # Select rest clients to meet approximate i.i.d. dist
-        sample_clients = []
-        rest_clients = np.delete(online_clients, rand_clients_idx).tolist()
-        if sampler == "random":
-            sample_clients = self.random_sampling(
-                rest_clients, num_sample_clients, my_round, base_dist, rand_clients)
-        elif sampler == "probability":
-            sample_clients = self.probability_sampling(
-                rest_clients, num_sample_clients, my_round, base_dist, rand_clients)
-        elif sampler == "brute":
-            sample_clients = self.brute_sampling(
-                rest_clients, num_sample_clients, base_dist, rand_clients)
-        elif sampler == "bayesian":
-            sample_clients = self.bayesian_sampling(
-                rest_clients, num_sample_clients, my_round, base_dist, rand_clients)
-        elif sampler == "ga":
-            sample_clients = self.genetic_sampling(
-                rest_clients, num_sample_clients, my_round, base_dist, rand_clients)
-        elif sampler == "gbp-cs":
-            sample_clients = self.gbp_cs_sampling(
-                rest_clients, num_sample_clients, batch_size, base_dist, rand_clients)
-
-        selected_clients = rand_clients + sample_clients
-
-        # Measure the distance of base distribution and mean distribution
-        distance = self.get_dist_distance(selected_clients, base_dist)
-        print("Dist Distance on Middle Server %i:"
-              % self.server_id, distance, flush=True)
-
-        # Visualize distributions if needed
-        if display:
-            from metrics.visualization_utils import plot_clients_dist
-
-            plot_clients_dist(clients=selected_clients,
-                              global_dist=base_dist,
-                              draw_mean=True,
-                              metrics_dir=metrics_dir)
-
-        return selected_clients
-
-    def random_sampling(self, clients, num_clients, my_round, base_dist=None,
-                        exist_clients=[], num_iter=1):
-        """Randomly sample num_clients clients from given clients.
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            my_round: The current training round, used as random seed.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-            num_iter: Number of iterations for sampling.
-        Returns:
-            rand_clients: List of randomly sampled clients.
-        """
-        np.random.seed(my_round)
-        rand_clients_ = []
-
-        if num_iter == 1:
-            rand_clients_ = np.random.choice(
-                clients, num_clients, replace=False).tolist()
-
-        elif num_iter > 1:
-            min_distance_ = 1
-            rand_clients_ = []
-
-            while num_iter > 0:
-                rand_clients_tmp_ = np.random.choice(
-                    clients, num_clients, replace=False).tolist()
-
-                all_clients_ = exist_clients + rand_clients_tmp_
-                distance_ = self.get_dist_distance(all_clients_, base_dist)
-
-                if distance_ < min_distance_:
-                    min_distance_ = distance_
-                    rand_clients_[:] = rand_clients_tmp_
-
-                num_iter -= 1
-
-        return rand_clients_
-
-    def probability_sampling(self, clients, num_clients, my_round, base_dist,
-                             exist_clients=[], num_iter=100):
-        """Randomly sample num_clients clients from given clients, according
-        to real-time learning probability.
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            my_round: The current training round, used as random seed.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-            num_iter: Number of iterations for sampling.
-        Returns:
-            rand_clients: List of sampled clients.
-        """
-        assert num_iter > 1, "Invalid num_iter=%s (num_iter>1)" % num_iter
-
-        np.random.seed(my_round)
-        min_distance_ = 1
-        rand_clients_ = []
-        prob_ = np.array([1. / len(clients)] * len(clients))
-
-        while num_iter > 0:
-            rand_clients_idx_ = np.random.choice(
-                range(len(clients)), num_clients, p=prob_, replace=False)
-            rand_clients_tmp_ = np.take(clients, rand_clients_idx_).tolist()
-
-            all_clients_ = exist_clients + rand_clients_tmp_
-            distance_ = self.get_dist_distance(all_clients_, base_dist)
-
-            if distance_ < min_distance_:
-                min_distance_ = distance_
-                rand_clients_[:] = rand_clients_tmp_
-
-                # update probability of sampled clients
-                prob_[rand_clients_idx_] += 1. / len(clients)
-                prob_ /= prob_.sum()
-
-            num_iter -= 1
-
-        return rand_clients_
-
-    def brute_sampling(self, clients, num_clients, base_dist, exist_clients=[]):
-        """Brute search all possible combinations to find best clients.
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-        Returns:
-            best_clients: List of sampled clients, which makes
-                selected_clients most satisfying i.i.d. distribution.
-        """
-        best_clients_ = []
-        min_distance_ = [np.inf]
-        clients_tmp_ = []
-
-        def recursive_combine(
-                clients_, start, num_clients_, best_clients_, min_distance_):
-
-            if num_clients_ == 0:
-                all_clients_ = exist_clients + clients_tmp_
-                distance_ = self.get_dist_distance(all_clients_, base_dist)
-                if distance_ < min_distance_[0]:
-                    best_clients_[:] = clients_tmp_
-                    min_distance_[0] = distance_
-
-            elif num_clients_ > 0:
-                for i in range(start, len(clients_) - num_clients_ + 1):
-                    clients_tmp_.append(clients_[i])
-                    recursive_combine(
-                        clients_, i + 1, num_clients_ - 1, best_clients_, min_distance_)
-                    clients_tmp_.remove(clients_[i])
-
-        recursive_combine(clients, 0, num_clients, best_clients_, min_distance_)
-
-        return best_clients_
-
-    def bayesian_sampling(self, clients, num_clients, my_round, base_dist,
-                          exist_clients=[], init_points=5, n_iter=25, verbose=0):
-        """Search for an approximate optimal solution using bayesian optimization.
-        Please refer to the link below for more details.
-            https://github.com/fmfn/BayesianOptimization
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            my_round: The current training round, used as random seed.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-            init_points: Number of iterations before the explorations starts. Random
-                exploration can help by diversifying the exploration space.
-            n_iter: Number of iterations to perform bayesian optimization.
-            verbose: The level of verbosity, set verbose>0 to it.
-        Returns:
-            approx_clients: List of sampled clients, which makes
-                selected_clients approximate to i.i.d. distribution.
-        """
-        from bayes_opt import BayesianOptimization
-        from bayes_opt.logger import JSONLogger
-        from bayes_opt.event import Events
-
-        def get_indexes_(**kwargs):
-            c_idx_ = map(int, kwargs.values())
-            c_idx_ = list(c_idx_)
-            return c_idx_
-
-        def distance_blackbox_(**kwargs):
-            # Get clients' indexes
-            c_idx_ = get_indexes_(**kwargs)
-            assert len(set(c_idx_)) == len(c_idx_), \
-                "Repeat clients are sampled."
-
-            # Get clients and calculate distance
-            sample_clients_ = np.take(clients, c_idx_).tolist()
-            all_clients_ = exist_clients + sample_clients_
-            distance = self.get_dist_distance(all_clients_, base_dist)
-
-            # Aim to maximize -distance
-            return -distance
-
-        pbounds_ = {}
-        interval_ = len(clients) / num_clients
-        for i in range(num_clients):
-            bound_left_ = int(i * interval_)
-            bound_right_ = int(min((i + 1) * interval_, len(clients))) - 1e-12
-            pbounds_["p%i" % (i + 1)] = (bound_left_, bound_right_)
-
-        optimizer = BayesianOptimization(
-            f=distance_blackbox_,
-            pbounds=pbounds_,
-            random_state=my_round,
-            verbose=verbose
-        )
-
-        optimizer.maximize(
-            init_points=init_points,
-            n_iter=n_iter,
-        )
-
-        optimal_params = optimizer.max["params"]
-        c_idx_ = get_indexes_(**optimal_params)
-        approx_clients_ = np.take(clients, c_idx_).tolist()
-        return approx_clients_
-
-    def genetic_sampling(self, clients, num_clients, my_round, base_dist,
-                         exist_clients=[], num_iter=100, size_pop=100,
-                         prob_mutation=0.001):
-        """Search for an approximate optimal solution using genetic algorithm.
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            my_round: The current training round, used as random seed.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-            num_iter: Number of iterations for sampling.
-            size_pop: Size of population.
-            prob_mutation: Probability of mutation.
-        Returns:
-            approx_clients: List of sampled clients.
-        """
-        from opt.genetic_algorithm import GeneticAlgorithm
-
-        assert size_pop >= 50, \
-            "We recommend setting pop_size > 50 to avoid the absence " \
-            "of feasible solutions."
-
-        def distance_blackbox_(X):
-            arr = []
-
-            # Get clients and calculate distances
-            for x in X:
-                c_idx_, = np.where(x == 1)
-                sample_clients_ = np.take(clients, c_idx_).tolist()
-                all_clients_ = exist_clients + sample_clients_
-                distance = self.get_dist_distance(all_clients_, base_dist)
-                arr.append(distance)
-
-            return np.array(arr)
-
-        ga = GeneticAlgorithm(
-            func=distance_blackbox_,
-            n_dim=len(clients),
-            n_select=num_clients,
-            size_pop=size_pop,
-            max_iter=num_iter,
-            prob_mutation=prob_mutation,
-            seed=my_round
-        )
-
-        best_x, best_y = ga.fit()
-        best_c_idx_, = np.where(best_x == 1)
-
-        approx_clients_ = np.take(clients, best_c_idx_).tolist()
-        return approx_clients_
-
-    def gbp_cs_sampling(self, clients, num_clients, batch_size, base_dist,
-                      exist_clients=[], mp_init=True):
-        """Search for an approximate optimal solution using genetic algorithm.
-        Args:
-            clients: List of clients to be sampled.
-            num_clients: Number of clients to sample.
-            batch_size: Number of samples in a batch data.
-            base_dist: Real data distribution, usually global_dist.
-            exist_clients: List of existing clients.
-            mp_init: Set to True to use MP Inverse initialization.
-        Returns:
-            approx_clients: List of sampled clients.
-        """
-        from mxnet import nd, autograd
-        from mxnet.gluon import loss as gloss
-
-        F = len(clients[0].train_sample_dist)
-
-        p = nd.array(
-            base_dist / base_dist.sum()).reshape((F, 1))
-        n = batch_size
-        L = len(exist_clients) + num_clients
-        A = nd.array(
-            [c.next_train_batch_dist for c in clients]).T
-        b = nd.array(sum(
-            [c.next_train_batch_dist for c in exist_clients])).reshape((F, 1))
-
-        # Find a initial feasible point
-        x = nd.zeros(shape=(A.shape[1], 1))
-        if mp_init:
-            y = n * L * p - b
-            Ainv_y = nd.dot(nd.array(np.linalg.pinv(A.asnumpy())), y)
-            x[nd.argsort(Ainv_y, axis=0, is_ascend=False)[:num_clients]] = 1
-
-        def _x2indexes(x, val=1, dtype=nd.array):
-            # Convert MXNET NDArray to NumPy NDArray
-            if type(x) == nd.ndarray.NDArray:
-                x = x.asnumpy().flatten()
-            # Find indexes where $val$ locate
-            idx_ = np.where(x == val)[0]
-            # Convert NumPy NDArray to the target type
-            return dtype(idx_)
-
-        def _calculate_distance(A, x, y):
-            distance = gloss.L2Loss(batch_axis=-1)
-            return distance(nd.dot(A, x), y)
-
-        def gradient_based_binary_permutation(A, x):
-            while True:
-                x.attach_grad()
-                # Calculate current distance
-                with autograd.record():
-                    if mp_init:
-                        y = n * L * p - b
-                    else:
-                        y = n * (len(exist_clients) + x.sum()) * p - b
-                    distance = _calculate_distance(A, x, y)
-                # Calculate gradients
-                distance.backward()
-                # Make a copy of original x
-                x_ = x.copy()
-                # Find index sets of elements 1 and 0
-                E0 = _x2indexes(x, val=0)
-                E1 = _x2indexes(x, val=1)
-                if x.sum().asscalar() < 8:# asscalar： 转换为标量
-                    # Change 0 with minimum gradient to 1
-                    
-                    #x_[E0[nd.argmin(x.grad[E0], axis=0)]] = 1
-                    #del x; x = x_
-                    if len(E0)>0:
-                    	x_[E0[nd.argmin(x.grad[E0], axis=0)]] = 1
-                    	del x; x = x_
-                else:
-                    # Permutation 1 with maximum gradient to 0
-                    pair = (E0[nd.argmin(x.grad[E0], axis=0)],
-                            E1[nd.argmax(x.grad[E1], axis=0)])
-                    x_[pair[0]] = 1
-                    x_[pair[1]] = 0
-                    # Continue until distance increases
-                    if _calculate_distance(A, x_, y) < distance:
-                        del x; x = x_
-                    else:
-                        return x
-
-        optimal_x = gradient_based_binary_permutation(A, x)
-
-        x_idx = _x2indexes(optimal_x, val=1, dtype=np.array)
-        return np.take(clients, x_idx).tolist()
-
-    def get_dist_distance(self, clients, base_dist, use_distance="l2"):
+    def get_dist_distance(self, num_class,selected_clusters, cluster_dists, base_dist, use_distance="l2"):
         """Return distance of the base distribution and the mean distribution.
         Args:
             clients: List of sampled clients.
@@ -528,8 +140,14 @@ class MiddleServer(Server):
             distance: The distance of the base distribution and the mean
                 distribution.
         """
-        c_sum_samples_ = sum([c.next_train_batch_dist for c in clients])
-        c_mean_dist_ = c_sum_samples_ / c_sum_samples_.sum()
+        temp=[np.array([selected_clusters[i]* cluster_dists[i][j] for j in range(num_class)]) for i in range(len(cluster_dists))]
+        #print(temp)
+        c_sum_samples_ = sum(temp) # class_num 62 大小的list  每个class的sample数量
+        #print("c_sum_samples_",c_sum_samples_)
+        c_mean_dist_ = c_sum_samples_ / c_sum_samples_.sum()#list 每个class的sample比例
+        #print(c_sum_samples_.sum())#一个值 全部sample数
+        #print("c_mean_dist_",c_mean_dist_)
+        
         base_dist_ = base_dist / base_dist.sum()
 
         distance = np.inf
@@ -549,19 +167,177 @@ class MiddleServer(Server):
             distance = scipy.stats.wasserstein_distance(c_mean_dist_, base_dist_)
 
         return distance
+            
+        
+    def select_clients(self, my_round, sampler, num_groups, num_class,clients, clusters, cluster_dists, base_dist,ep,log_fp=None):# rand_per_group=2
+        """
+        原在middle server下的select——clients 改为在top server下
+        返回 clients_per_group: 每个supernpde的客户数量
+        """
+                            
+        if sampler == "lagrangian":
+            selected_clusters,clients_per_group = self.lagrangian_sampling(num_class,clusters, num_groups,cluster_dists, base_dist,ep)
+        elif sampler == "random":
+            selected_clusters,clients_per_group = self.random_sampling(num_class,clusters, num_groups,cluster_dists, base_dist,ep)
+            
+        np.random.seed(my_round)
+	#selected_clients = np.random.choice(clients, num_clients, replace=False).tolist()
+        # Measure the distance of base distribution and mean distribution
+        distance = self.get_dist_distance(num_class,selected_clusters,cluster_dists, base_dist)
+        print("Dist Distance:", distance, file=log_fp,flush=True)
+        # random select clients from clusters
+        supernodes=[[]for i in range(num_groups)]
+        col=0
+        for i in range(len(clusters)):
+            rand_clients_ = np.random.choice(clusters[i], num_groups*selected_clusters[i], replace=False).tolist()
+            for j in range(num_groups):
+                supernodes[j].extend(rand_clients_[col:col+selected_clusters[i]])
+                col+=selected_clusters[i]
+        #print(supernodes)
+        return supernodes,clients_per_group
 
-    def train_model(self, my_round, num_syncs, clients_per_group,
-                    sampler, batch_size, base_dist):
+
+
+    def lagrangian_sampling(self, num_class,clusters, num_groups ,cluster_dists, base_dist,ep):
+        """
+         fx
+        """
+        def get_map(L,B):
+            the_map=[]
+            for i in range(len(clusters)):
+                n=1
+                l=L[i]
+                b=B[i]
+                for j in range(l-1):
+                    the_map.append(n)
+                    b-=n
+                    n*=2
+                the_map.append(b)
+            return the_map
+            
+        def get_A(M,L,num_class,cluster_dists,the_map):
+            A=[[0 for j in range(num_class)] for i in range(M)]
+            cur=0
+            for i in range(len(cluster_dists)):
+                l=L[i]
+                for k in range(l):
+                    for j in range(num_class):
+                        A[cur][j]=cluster_dists[i][j]*the_map[cur]
+                    cur+=1
+            return A
+            
+        def get_selected_clusters(clusters,x_idx,L,the_map):
+            selected_clusters=[0 for i in range(len(clusters))]
+            cur=0
+            for i in range(len(clusters)):
+                l=L[i]
+                for k in range(l):
+                    selected_clusters[i]+=int(x_idx[cur]*the_map[cur])
+                    cur+=1
+            return selected_clusters,sum(selected_clusters)
+            
+        def get_bin(x):
+            return bin(x).replace('0b','') 
+            
+        def get_binary(x):
+            return x*(1-x)
+
+        def penalty_function(x, l, t):
+           tmp = 0
+           for i in range(0,len(x)):
+               tmp += l[i]*get_binary(x[i])+t/2*get_binary(x[i])**2
+           return tmp
+
+        def f(x,C,q):
+           return np.dot(np.dot(np.array(x).T,C),np.array(x))+np.dot(np.array(q),np.array(x))
+
+        def update_lmbda(lmbda, x, t):
+           for i in range(len(lmbda)):
+               #print("lmbda",lmbda)
+               #print(t*get_binary(x[i]))
+               #lmbda += t*get_binary(x[i])
+               lmbda[i] += t*get_binary(x[i])
+
+        def augmented_lagrangian(x,lmbda,t,C,b):
+           return f(x,C,b)+penalty_function(x,lmbda,t)
+
+        def augmented_largrangian_optimize(x0, l, t):
+           """
+           x0:初值  设置为一堆1
+           l:lambda
+           t:惩罚系数
+           """
+           x = x0
+           lmbda = l
+           for i in range(ep):
+               res = minimize(lambda x: augmented_lagrangian(x,lmbda,t,Q,p),x,method='L-BFGS-B').x
+               t = t*1.01
+               update_lmbda(lmbda,x, t)
+               x = res
+           return x
+        
+
+        B=[math.floor(len(cluster)/num_groups) for cluster in clusters]
+        L=[math.ceil(math.log(b,2)) for b in B]
+        M=sum(L)
+        the_map=get_map(L,B)# len:M  map of value
+        A=get_A(M,L,num_class,cluster_dists,the_map)
+        Q = np.dot(A, np.transpose(A))
+        p = -2*np.dot(base_dist, np.transpose(A))
+        # C = QQ^T-2*diag(p)
+        # C = matrix(np.dot(np.transpose(A), A)-2*np.diag(p))
+        res = augmented_largrangian_optimize([1.0]*M, [1.0]*M, 1.0)# 每列对应一个值，接近1的代表选
+        #print("res",res)
+        # 存疑，不知道是不是应该这样写，对client不太清楚。如果是不限制client的数量的话，那么就是选择res中大于0.5的client。
+        #x_idx = np.argsort(res)[-num_clients:] 
+        x_idx=[abs(round(x,0)) for x in res]
+        #print("x_idx",x_idx)
+        selected_clusters,clients_per_group=get_selected_clusters(clusters,x_idx,L,the_map)
+        return selected_clusters,clients_per_group
+        
+    def random_sampling(self, num_class,clusters, num_groups ,cluster_dists, base_dist,ep):
+        np.random.seed(ep)
+        B=[math.floor(len(cluster)/num_groups) for cluster in clusters]
+        selected_clusters=[]
+        for i in range(len(clusters)):
+            selected_clusters.append(random.randint(0,B[i]))
+        clients_per_group=sum(selected_clusters)
+        return selected_clusters,clients_per_group
+
+
+class MiddleServer(Server):
+    def __init__(self, server_id, server_model, merged_update, clients_in_group):
+        self.server_id = server_id
+        self.clients = []
+        self.register_clients(clients_in_group)
+        super(MiddleServer, self).__init__(server_model, merged_update)
+
+    def register_clients(self, clients):
+        """Register clients of this middle server.
+        Args:
+            clients: Clients to be registered.
+        """
+        if type(clients) is not list:
+            clients = [clients]
+
+        self.clients.extend(clients)
+
+
+
+    
+
+    def train_model(self, my_round, num_syncs,log_fp):
+        """def train_model(self, my_round, num_syncs, clients_per_group,sampler, batch_size, base_dist,log_fp):"""
         """Train self.model for num_syncs synchronizations."""
         print('tain model start')
         for _ in range(num_syncs):
             print('syncs',_)
-            # Select clients for current synchronization
-            selected_clients = self.select_clients(
-                my_round, clients_per_group, sampler, batch_size, base_dist)
+            # Select clients for current synchronization 
+            # middle server每次训练都从中选择客户参与训练
+            #selected_clients = self.select_clients(my_round, clients_per_group, sampler, batch_size, base_dist,log_fp)
 
             # Train on selected clients for one iteration
-            for c in selected_clients:
+            for c in self.clients:
                 c.set_model(self.model)
                 comp, num_samples, update = c.train(my_round)
                 self.merge_updates(num_samples, update)
@@ -676,4 +452,5 @@ class MiddleServer(Server):
               % (self.server_id, self.num_clients, self.num_samples,
                  self.num_train_samples, self.num_test_samples),
               file=log_fp, flush=True, end="\n")
-        print("sample distribution:", list(self.sample_dist.astype("int64")))
+        print("sample distribution:", list(self.sample_dist.astype("int64")),file=log_fp, flush=True)
+

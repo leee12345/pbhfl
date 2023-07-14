@@ -43,7 +43,7 @@ def main():
     mod = importlib.import_module(server_path)
     ServerModel = getattr(mod, "ServerModel")
 
-    print('load model')
+    print('load model',file=log_fp, flush=True)
     # learning rate, num_classes, and so on
     param_key = "%s.%s" % (args.dataset, args.model)
     model_params = MODEL_PARAMS[param_key]
@@ -54,70 +54,76 @@ def main():
     num_classes = model_params[1]
 
     # Create the shared client model
-    print('create client model')
+    print('create client model',file=log_fp, flush=True)
     client_model = ClientModel(
         args.seed, args.dataset, args.model, ctx, *model_params)
 
     # Create the shared middle server model 中间的super model
-    print('create middle server model')
+    print('create middle server model',file=log_fp, flush=True)
     middle_server_model = ServerModel(
         client_model, args.dataset, args.model, num_classes, ctx)
     middle_merged_update = ServerModel(
         None, args.dataset, args.model, num_classes, ctx)
 
     # Create the top server model
-    print('create top server model')
+    print('create top server model',file=log_fp, flush=True)
     top_server_model = ServerModel(
         client_model, args.dataset, args.model, num_classes, ctx)
     top_merged_update = ServerModel(
         None, args.dataset, args.model, num_classes, ctx)
 
     # Create clients
-    print('create clients')
+    print('create clients',file=log_fp, flush=True)
     clients, clusters = setup_clients(client_model, args)
-    print('len clusters',len(clusters))
+    print('len clusters',len(clusters),file=log_fp, flush=True)
     client_ids, client_clusters, client_num_samples = get_clients_info(clients)
     print("Total number of clients: %d" % len(clients),file=log_fp, flush=True)
+    print('clusters',client_clusters,file=log_fp, flush=True)
+    #计算每个cluster的平均类别分布
+    cluster_dists=get_cluster_dists(clusters)
+    
+    
     #print("Total number of clients: %d" % len(clients))
-    # Measure the global data distribution 计算P real
+    # Measure the global data ribution 计算P real
     global_dist, _, _ = get_clients_dist(
-        clients, display=False, max_num_clients=20, metrics_dir=args.metrics_dir)
+        clients, display=False, max_num_clients=100, metrics_dir=args.metrics_dir) #max_num_clients=20
 
-    # Create middle servers
-    middle_servers = setup_middle_servers(
-        middle_server_model, middle_merged_update, clusters)
+    # Create middle servers 改为每轮r select clients 构建 supernode
+#    middle_servers = setup_middle_servers(middle_server_model, middle_merged_update, clusters)
     # [middle_servers[i].brief(log_fp) for i in range(args.num_groups)]
-    print("Total number of middle servers: %d" % len(middle_servers),file=log_fp, flush=True)
-    #print("Total number of middle servers: %d" % len(middle_servers))
+#    print("Total number of middle servers: %d" % len(middle_servers),file=log_fp, flush=True)
 
     # Create the top server
-    top_server = TopServer(
-        top_server_model, top_merged_update, middle_servers)
+    middle_servers=[]
+    top_server = TopServer(top_server_model, top_merged_update, middle_servers)
 
     # Display initial status
-    print("--- Random Initialization ---",file=log_fp, flush=True)
+#    print("--- Random Initialization ---",file=log_fp, flush=True)
     #print("--- Random Initialization ---")
     stat_writer_fn = get_stat_writer_function(
         client_ids, client_clusters, client_num_samples, args)
     print_stats(
         0, top_server, client_num_samples, stat_writer_fn,
         args.use_val_set, log_fp)
+    #global_dist: List of num samples for each class.  62 class
+    print("len of gd",len(global_dist))
+    print("sum of gd",sum(global_dist))
 
     # Training simulation
     for r in range(1, args.num_rounds+1):
-        print("--- Round %d of %d ---" % (r, args.num_rounds),file=log_fp, flush=True)
-        #print("--- Round %d of %d ---" % (r, args.num_rounds))
-	
-        # Simulate training on selected clients
-        top_server.train_model(
-            r, args.num_syncs, args.clients_per_cluster,
-            args.sampler, args.batch_size, global_dist)
-
-        # Test model
-        if r % args.eval_every == 0 or r == args.num_rounds:
-            print_stats(
-                r, top_server, client_num_samples, stat_writer_fn,
-                args.use_val_set, log_fp)
+       print("--- Round %d of %d ---" % (r, args.num_rounds),file=log_fp, flush=True)
+       supernodes,clients_per_group= top_server.select_clients(r,args.sampler,args.num_groups,args.num_class,clients, clusters, cluster_dists, global_dist,30,log_fp=None)
+       s_client_ids, s_client_clusters, s_client_num_samples =get_supernodes_info(supernodes)
+       middle_servers = setup_middle_servers(middle_server_model, middle_merged_update, supernodes)
+       top_server.update_middleserver(middle_servers)
+       # [middle_servers[i].brief(log_fp) for i in range(args.num_groups)]
+       print("Total number of middle servers: %d" % len(middle_servers),file=log_fp, flush=True)
+      
+       # Simulate training on selected clients
+       top_server.train_model(r, args.num_syncs,clients_per_group,log_fp)
+       # Test model
+       if r % args.eval_every == 0 or r == args.num_rounds:
+           print_stats(r, top_server, s_client_num_samples, stat_writer_fn,args.use_val_set, log_fp)
 
 
     # Save the top server model
@@ -174,6 +180,7 @@ def cluster_clients(k,S,clients):
        for c_id in i_ids:
            clusters[i].append((clients[c_id]))
     return clusters
+    
 
 # def create_clients(users, groups, train_data, test_data, model, args):
 #     # Randomly assign a group to each client, if groups are not given    若没有组，随机给客户分组
@@ -287,14 +294,46 @@ def get_clients_info(clients):
     num_samples = {c.id: c.num_samples for c in clients}
     print('get_clients_info end')
     return ids, clusters, num_samples
+    
+def get_supernodes_info(supernodes):
+    """Returns the ids, groups and num_samples for the given supernodes.
+    Args:
+        clients: List of Client objects.
+    Returns:
+        ids: List of client_ids for the given clients.
+        clusters: Map of {client_id: cluster_id} for the given clients.
+        num_samples: Map of {client_id: num_samples} for the given
+            clients.
+    """
+    ids = [c.id  for supernode in supernodes for c in supernode ]
+    clusters = {c.id: c.cluster for supernode in supernodes for c in supernode }
+    num_samples = {c.id: c.num_samples for supernode in supernodes for c in supernode}
+    print('get_supernodes_info end')
+    return ids, clusters, num_samples
 
+    
+def get_cluster_dists(clusters):
+    """
+    获取每个cluster的类别分布
+    N: cluster num
+    K: class num
+    return  N*K  matrix
+    """
+    cluster_dists=[]
+    for cluster in clusters:
+    	cluster_train_dist = sum([c.train_sample_dist for c in cluster])
+    	cluster_test_dist = sum([c.test_sample_dist for c in cluster])
+    	cluster_dist = cluster_train_dist + cluster_test_dist
+    	cluster_dists.append(cluster_dist.tolist())
+    	
+    return cluster_dists
 
 def get_clients_dist(
-        clients, display=False, max_num_clients=20, metrics_dir="metrics"):
+        clients, display=False, max_num_clients=100, metrics_dir="metrics"):
     """Return the global data distribution of all clients.
     Args:
         clients: List of Client objects.
-        display: Visualize data distribution when set to True.
+        display: Visualize data distribution when set  True.
         max_num_clients: Maximum number of clients to plot.
         metrics_dir: Directory to save metrics files.
     Returns:
@@ -343,21 +382,21 @@ def get_clients_dist(
 #        for g in range(num_groups)]
 #    return middle_servers
 
-def setup_middle_servers(server_model, merged_update, clusters):
+def setup_middle_servers(server_model, merged_update, supernodes):
     """Instantiates middle servers based on given ServerModel objects.
     Args:
         server_model: A shared ServerModel object to store the middle
             server model.
         merged_update: A shared ServerModel object to merge updates
             from clients.
-        groups: List of clients in each group.
+        supernodes: List of clients in each supernode.
     Returns:
         middle_servers: List of all middle servers.
     """
-    num_clusters = len(clusters)
+    num_groups = len(supernodes)
     middle_servers = [
-        MiddleServer(c, server_model, merged_update, clusters[c])
-        for c in range(num_clusters)]
+        MiddleServer(s, server_model, merged_update, supernodes[s])
+        for s in range(num_groups)]
     return middle_servers
 
 
@@ -373,6 +412,7 @@ def get_stat_writer_function(ids, groups, num_samples, args):
 
 def print_stats(num_round, server, num_samples, writer, use_val_set, log_fp=None):
     train_stat_metrics = server.test_model(set_to_use="train")
+    #print(train_stat_metrics)
     print_metrics(
         train_stat_metrics, num_samples, prefix="train_", log_fp=log_fp)
     writer(num_round, train_stat_metrics, "train")
@@ -395,9 +435,11 @@ def print_metrics(metrics, weights, prefix="", log_fp=None):
         log_fp: File pointer for logs.
     """
     ordered_weights = [weights[c] for c in sorted(weights)]
+    #print("ordered_weights",ordered_weights)
     metric_names = metrics_writer.get_metrics_names(metrics)
     for metric in metric_names:
         ordered_metric = [metrics[c][metric] for c in sorted(metrics)]
+        #print("ordered_metric",ordered_metric)
         print("%s: %g, 10th percentile: %g, 50th percentile: %g, 90th percentile %g" \
               % (prefix + metric,
                  np.average(ordered_metric, weights=ordered_weights),
