@@ -19,33 +19,37 @@ def parse_args():
     parser.add_argument("--num-rounds",
                         help="total rounds of external synchronizations;",
                         type=int,
-                        default=20) #500
+                        default=200) #500  20
     parser.add_argument("--eval-every",
                         help="interval rounds for model evaluation;",
                         type=int,
-                        default=1)
-    # parser.add_argument("--num-groups",
-    #                     help="number of groups;",
-    #                     type=int,
-    #                     default=10)
+                        default=1) # 5 1
+    parser.add_argument("--num-class",
+                        help="number of class;",
+                        type=int,
+                        default=62)#10 5
     parser.add_argument("--num-clusters",
                         help="number of clusters;",
                         type=int,
-                        default=5)#10
+                        default=10)#10 5
+    parser.add_argument("--num-groups",
+                        help="number of supernodes;",
+                        type=int,
+                        default=10)#10 5
     # parser.add_argument("--clients-per-group",
     #                     help="number of clients selected in each group;",
     #                     type=int,
     #                     default=10)
-    parser.add_argument("--clients-per-cluster",
-                        help="number of clients selected in each cluster;",
-                        type=int,
-                        default=2)#10
+    #parser.add_argument("--clients-per-group",
+    #                    help="number of clients selected in each supernode;",
+    #                    type=int,
+    #                    default=2)#10 2
     parser.add_argument("-sampler",
                         help="sampler to be used, can be random, brute, "
                              "bayesian, probability, ga and gbp-cs;",
                         type=str,
                         choices=SAMPLERS,
-                        default="random")# gdp-cs
+                        default="lagrangian")# gdp-cs lagrangian brute random
     parser.add_argument("--batch-size",
                         help="number of training samples in each batch;",
                         type=int,
@@ -53,11 +57,11 @@ def parse_args():
     parser.add_argument("--num-syncs",
                         help="number of internal synchronizations in each round;",
                         type=int,
-                        default=5)#50
+                        default=50)#50
     parser.add_argument("-lr",
                         help="learning rate for local optimizers;",
                         type=float,
-                        default=0.01)
+                        default=0.01)# 0.01
     parser.add_argument("--seed",
                         help="seed for client selection and batch splitting;",
                         type=int,

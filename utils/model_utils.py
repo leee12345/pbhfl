@@ -100,8 +100,14 @@ def read_dir(data_dir):
 
     clients = list(sorted(data.keys()))
     #add
-    clients=clients[:10]
-    groups=groups[:10]
+    
+    print(len(clients))
+    print(len(groups))
+    clients=clients[:1000]
+    groups=groups[:1000]
+    
+    clients=clients
+    groups=groups
     #add
     print('read_dir len(clients)',len(clients))
     return clients, groups, data
